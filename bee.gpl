@@ -1,0 +1,506 @@
+
+/////////////////////////////////////
+//
+// Start of variable declarations
+//
+/////////////////////////////////////
+
+  // these variables set the parameters of the window created by gpl
+  int window_x        = 0;
+  int window_y        = 0;
+  int window_width    = 1000;
+  int window_height   = 550;
+  double window_red   = 0;
+  double window_green = 0;
+  double window_blue  = 0;
+  string window_title = "To Bee or not to Bee";
+  
+  // this is the refresh rate of the program
+  int animation_speed = 90; 
+ 
+  // standard loop variables
+  int i;
+  int j;
+  int k;  
+    
+  // position and movement variables for the player's ship
+  double x_vel             = 0;
+  double y_vel             = 0;
+  double vel_mag           = 0;
+  double max_main_vel      = 12;
+  double main_thruster_acc = 2.7;
+  double over_speed_drag   = .8;
+  double fuel_lvl          = 1000.0;
+  double main_fuel_usage   = 1.3;
+  double hull_hp           = 100.0;
+  double dmg_absorb        = 1.0;
+  int on_surface           = 0;
+  int cur_area             = 0;
+  int prev_area            = 0;
+  int ship_w               = 100;
+  int ship_h               = 24;
+  int score                = 0;
+  int cargo_reward         = 300;
+  int bullet_count         = 0;
+  int bullet_speed         = 15;
+  int max_bullets          = 3;
+  double cannon_fuel_usage = 20;
+  circle bullets [max_bullets];    
+  //
+  textbox tb_fuel_left (x = 25, y = window_height - 30, size = .2, 
+                        red = 1, green = 1, blue = 1); 
+  
+  textbox tb_cur_area (x = 25, y = window_height - 60, size = .2, 
+                        red = 1, green = 1, blue = 1); 
+                         
+  textbox tb_hull (x = window_width/2 - 100, y = window_height - 30,  size = .2,
+                        red = 1, green = 1, blue = 1); 
+  
+  textbox tb_speed (x = window_width/2 - 100, y = window_height - 60, size = .2,
+                        red = 1, green = 1, blue = 1); 
+  
+  
+  textbox tb_score (x = window_width - 200, y = window_height - 30, size = .2,
+                        red = 1, green = 1, blue = 1); 
+  
+  // other game variables
+  double gravity = .09;
+  double drag = .999;
+  
+  // animation declarations
+  forward animation animate_ship (pixmap ship_rec);  
+  forward animation animate_surf_recs (rectangle moon_rec); 
+  forward animation animate_surf_tris (triangle moon_tri);
+  forward animation animate_npc_ship (pixmap npc_ship);
+  forward animation animate_cargo (pixmap cargo_pm);
+  forward animation animate_bullets (circle bullet);
+
+  pixmap mdl_ship (x = 250, y = 300, filename = "dragonfly.bmp",  animation_block = animate_ship);
+  
+  int spawn_cargo = 0;
+
+  // shapes and variables that define the ground 
+  int AREA_COUNT    = 8;
+  int MAX_HEIGHT    = 150;
+  int MIN_HEIGHT    = 50;
+  int DEVIATION     = 50;
+  int RECS_PER_AREA = 20;// should evenly divide the window width to prevent gaps
+  int TRIS_PER_AREA = RECS_PER_AREA;
+  int REC_COUNT     = AREA_COUNT * RECS_PER_AREA;
+  int TRI_COUNT     = AREA_COUNT * TRIS_PER_AREA;  
+  
+  double tri_w;
+  double tri_h;
+  int prev_h = 50;
+	
+	triangle  t_surf[TRI_COUNT]; 
+  rectangle r_surf[REC_COUNT];
+	
+  // enemy ship variables 
+  int MAX_NPC          = 16;
+  int npc_count        = 0;
+  double target_x			 = 0;
+  double target_y      = 0;
+  double npc_dmg       = 2.7;
+  double npc_speed     = 10;
+  double npc_timer     = 0;
+  double vec_x    		 = 0;
+  double vec_y    		 = 0;
+  double vec_mag			 = 0;
+  int spawn_npc        [MAX_NPC];
+  pixmap npc_ships     [MAX_NPC]; 		
+  
+  // these variable are used to create a path for NPCs to follow
+  int node_count = 360;
+  rectangle path[node_count];
+  int cur_node = 0;
+  int ticks_per_node = 20;
+  double angle_interval = 360.0/node_count;
+  int node_spacing = 18;
+
+	pixmap powerup (visible = false, filename = "cargo.bmp", animation_block = animate_cargo);
+
+  pixmap bg_image (x = 0, y = 0, filename = "honey.bmp"); 
+
+
+////////////////////////////////////////
+//
+// Start of initialization block 
+//
+////////////////////////////////////////
+
+initialization{
+   for (i = 0; i < max_bullets; i += 1){
+      bullets[i].radius = 5;
+      bullets[i].visible = 0;
+      bullets[i].animation_block = animate_bullets;
+   }
+
+  // initialize NPCs
+  for (i = 0; i < MAX_NPC; i += 1){
+    npc_ships[i].filename = "bee.bmp";
+    npc_ships[i].animation_block = animate_npc_ship;
+    npc_ships[i].user_int = i;
+    npc_ships[i].visible = 0;
+    spawn_npc[i] = 0;
+  }
+
+  // initialize NPC path nodes
+  for (i = 0; i < node_count; i += 1){
+    path[i].x = floor (cos (i * angle_interval) * ( 480 * sin (4 * i * angle_interval) ) + 500);
+    path[i].y = floor (sin (i * angle_interval) * ( 200 * sin (4 * i * angle_interval) ) + 325);
+    path[i].w = 10;
+    path[i].h = 10;
+    path[i].user_int = i;
+    path[i].visible = 0;
+    //path[i].animation_block = ;
+  }
+
+  //this block randomly generates the moons topography
+  for (i = 0; i < REC_COUNT; i += 1){
+    r_surf[i].x = ((window_width*i)/RECS_PER_AREA)%window_width;
+    r_surf[i].y = 0;
+    r_surf[i].w = window_width/RECS_PER_AREA;
+    r_surf[i].h = (random (DEVIATION)-(DEVIATION/2) + prev_h);
+    if (r_surf[i].h > MAX_HEIGHT) r_surf[i].h = MAX_HEIGHT;
+    if (r_surf[i].h < MIN_HEIGHT) r_surf[i].h = MIN_HEIGHT;
+    prev_h = r_surf[i].h;
+    r_surf[i].red = .8;
+    r_surf[i].green = .6;
+    r_surf[i].blue = .01;
+    r_surf[i].visible = 0;
+    r_surf[i].animation_block = animate_surf_recs;
+    r_surf[i].user_int = i;
+  }
+  
+  //this block creates slopes between elevation lines
+  for (i = 0; i < TRI_COUNT; i += 1){
+    if ( i < TRI_COUNT-1){
+      t_surf[i].size = r_surf[i].w + r_surf[i+1].w;
+      if (r_surf[i+1].h > r_surf[i].h){
+        t_surf[i].y = r_surf[i].h;
+        tri_h = (r_surf[i+1].h - r_surf[i].h);
+      }
+      else{
+        t_surf[i].y = r_surf[i+1].h;
+        tri_h = (r_surf[i].h - r_surf[i+1].h);
+      }
+    }
+    else{
+      t_surf[i].y = r_surf[i].y;
+      t_surf[i].size = 1;
+      tri_h = 1;
+    }
+  tri_h = tri_h*.9;//this reduces the triangle skew slightly to get rid of batman ears
+  t_surf[i].animation_block = animate_surf_tris;
+  t_surf[i].user_int = i;
+  t_surf[i].x = r_surf[i].x; 
+  tri_w = t_surf[i].size;
+  t_surf[i].skew = tri_h/tri_w;
+  t_surf[i].red = .8;
+  t_surf[i].green = .6;
+  t_surf[i].blue = .01;
+  }
+}
+
+////////////////////////////////////////////////
+//
+// Start of animation blocks
+//
+////////////////////////////////////////////////
+
+//this animation updates the player's ship
+animation animate_ship(pixmap ship_rec){
+	
+	if (fuel_lvl > 0 && hull_hp > 0){
+
+		mdl_ship.x += floor(x_vel);
+		mdl_ship.y += floor(y_vel);
+
+		x_vel = x_vel * drag;
+		y_vel -= gravity;
+		vel_mag = sqrt (x_vel*x_vel + y_vel*y_vel);
+		
+		//this block handles the case of the ship landing or crashing
+		on_surface = 0;
+		for (i = cur_area * RECS_PER_AREA; i < (cur_area+1) * RECS_PER_AREA; i += 1){
+		  if (mdl_ship touches r_surf[i]){
+		    on_surface = 1;
+		  }
+		}
+		for (i = cur_area * TRIS_PER_AREA; i < (cur_area+1) * TRIS_PER_AREA; i += 1){
+		  for (j = 0; j < 4; j += 1){
+		    if (mdl_ship touches t_surf[i] ){
+		      //on_surface = 1;
+		     }
+		  }
+		}
+		
+		// these cases handle the ship moving off the screen
+		if (mdl_ship.x >= window_width){
+		  //x_vel = -x_vel;
+		  cur_area = (cur_area+1) % AREA_COUNT;
+		  mdl_ship.x = 0;
+		}
+		else if (mdl_ship.x <= 0){
+		  //x_vel = -x_vel;
+		  cur_area = (cur_area+AREA_COUNT-1)%AREA_COUNT;
+		  mdl_ship.x = window_width - ship_w;
+		}
+		if (mdl_ship.y > window_height - ship_h){
+		  y_vel = (-y_vel);
+		  x_vel = x_vel/2;
+		}
+		else if (mdl_ship.y <= 0 || on_surface){
+		  if (vel_mag > dmg_absorb){
+		    hull_hp -= (vel_mag - dmg_absorb)*3.0;
+		  }
+		  y_vel = (-y_vel) * .7;
+		  x_vel = x_vel * .3;
+	 
+		  mdl_ship.y += 1;
+		  on_surface = 0;
+		}
+
+		// player enters a new area
+		if (cur_area != prev_area){
+	 		
+			if (cur_area % 3 == 2){
+				spawn_cargo = 1;
+			}
+		
+		  // remove NPCS from previous area and spawn some new ones
+		  npc_count = 0;
+		  for (i = 0; i < MAX_NPC; i += 1){
+		    npc_ships[i].visible = 0;
+		    if (random(2) == 1){
+		      spawn_npc[i] = 1;
+		      npc_count += 1;
+		    }
+		  }
+		}
+		prev_area = cur_area;
+  }
+  else{
+  	mdl_ship.visible = 0;
+  }
+  
+  tb_hull.text = "HP: " + hull_hp  + "%";
+  tb_speed.text = "Speed: " + vel_mag;
+  tb_fuel_left.text = "Energy: " + fuel_lvl;
+  tb_cur_area.text = "Sector: " + cur_area;
+  tb_score.text = "Score: " + score;
+}
+
+animation animate_npc_ship (pixmap npc_ship)
+{
+  i = (cur_node + npc_ship.user_int * node_spacing)%node_count;
+
+  // NPCs are spawned randomly when the player enters a new area
+  if (spawn_npc[npc_ship.user_int] == 1){
+    npc_ship.visible = true;
+    npc_ship.x = window_width/2 + random(200)-100;
+    npc_ship.y = window_height/2 + random(200)-100;
+    spawn_npc[npc_ship.user_int] = 0;
+  }
+
+  // NPC behavior type A: move towards the player
+  else if (npc_ship.user_int%7 == 1){
+    target_x = mdl_ship.x;
+    target_y = mdl_ship.y;
+  }
+  // NPC behavior type B: move in a procedurally determined path
+  else if (npc_ship.user_int%3  <= 3){
+      target_x = path[i].x;
+      target_y = path[i].y;
+  }
+  
+  vec_x = (target_x - npc_ship.x);
+  vec_y = (target_y - npc_ship.y);
+
+	vec_mag = sqrt(vec_x*vec_x + vec_y*vec_y);
+	
+	if (vec_mag > .5){
+		vec_x = npc_speed * (vec_x/vec_mag);
+		vec_y = npc_speed * (vec_y/vec_mag);
+	
+		npc_ship.x += floor(vec_x);
+		npc_ship.y += floor(vec_y);
+	}
+  // keep NPCs from flying off screen
+  if (npc_ship.x >= window_width){
+    npc_ship.x = window_width - 64;
+  }
+  else if (npc_ship.x <= 0){
+    npc_ship.x = 1;
+  }
+  if (npc_ship.y > window_height - 64){
+    npc_ship.y = window_height - 64;
+  }
+  else if (npc_ship.y <= 100){
+    npc_ship.y = 101; 
+  }
+
+  // NPCs do damage to the player's ship if close enough
+  if (npc_ship touches mdl_ship && npc_ship.visible == 1 && mdl_ship.visible == 1){
+    hull_hp -= npc_dmg - dmg_absorb;
+    x_vel = -x_vel*.7;
+    y_vel = -y_vel*.7;
+
+    mdl_ship.x += 2*floor(x_vel);
+    mdl_ship.y += 2*floor(y_vel);
+  }
+  npc_timer += 1;
+
+  if (floor(npc_timer)%ticks_per_node == 0){
+    cur_node = (cur_node + 1)%node_count;
+  }
+}
+
+animation animate_bullets (circle bullet)
+{
+  if (bullet.visible == 1){
+    bullet.x += bullet_speed;
+    if (bullet.x > window_width)
+    {
+      bullet.visible = 0;
+      bullet_count -= 1;
+    }
+
+    for (i = 0; i < MAX_NPC; i += 1)
+    {
+      if (npc_ships[i].visible == 1 && bullet.visible == 1 && bullet touches npc_ships[i])
+      {
+        npc_ships[i].visible = 0;
+        bullet.visible = 0;
+        bullet_count -= 1;
+        score += 100;
+      }
+    }
+  }
+}
+
+animation animate_cargo (pixmap cargo_pm)
+{
+  if (spawn_cargo){
+    powerup.x = random(200) + window_width/3;
+    powerup.y = random(400) + window_height/3;
+		powerup.visible = true;
+    spawn_cargo = 0;
+  }
+  else if (powerup.visible)
+  {
+    if (powerup touches mdl_ship){
+      powerup.visible = 0;
+      score += cargo_reward;
+      fuel_lvl += 200;
+      hull_hp += 20;
+    }
+  }
+}
+
+animation animate_surf_recs (rectangle moon_rec){ 
+  if ( moon_rec.user_int >= cur_area*RECS_PER_AREA && moon_rec.user_int < (cur_area+1)*RECS_PER_AREA ){
+    moon_rec.visible = 1;
+  }
+  else{
+    moon_rec.visible = 0;
+  }
+}
+
+animation animate_surf_tris (triangle moon_tri){
+  if ( moon_tri.user_int >= cur_area*TRIS_PER_AREA && moon_tri.user_int < (cur_area+1)*TRIS_PER_AREA ){
+    moon_tri.visible = 1;
+  }
+  else{
+    moon_tri.visible = 0;
+  }
+}
+
+
+///////////////////////////////////////////////////////////////////////
+//
+// Start of key callbacks
+//
+///////////////////////////////////////////////////////////////////////
+// 
+// GLUT does not provide support for multiple simultaneous key presses.
+// Because of this limitation, the only way to mimic multiple key
+// commands at the same time is to rapidly tap alternating keys.
+
+//go left thruster
+on akey{
+  x_vel -= main_thruster_acc;
+  vel_mag = sqrt (x_vel*x_vel + y_vel*y_vel);
+  if (vel_mag > max_main_vel){
+    x_vel = x_vel * over_speed_drag;
+    y_vel = y_vel * over_speed_drag;
+  }
+  fuel_lvl -= main_fuel_usage;
+}
+
+//downward thruster
+on skey{
+  y_vel -= main_thruster_acc;
+  fuel_lvl -= main_fuel_usage;
+  
+}
+
+//go right thruster
+on dkey{
+  x_vel += main_thruster_acc;
+  vel_mag = sqrt (x_vel*x_vel + y_vel*y_vel);
+  if (vel_mag > max_main_vel){
+    x_vel = x_vel * over_speed_drag;
+    y_vel = y_vel * over_speed_drag;
+  }
+  fuel_lvl -= main_fuel_usage;
+}
+
+//upward thruster 
+on wkey{
+  y_vel += main_thruster_acc;
+  vel_mag = sqrt (x_vel*x_vel + y_vel*y_vel);
+  if (vel_mag > max_main_vel){
+    x_vel = x_vel * over_speed_drag;
+    y_vel = y_vel * over_speed_drag;
+  }
+  fuel_lvl -= main_fuel_usage;
+}
+
+// fire cannon
+on rightarrow{
+
+	if (bullet_count < max_bullets){
+		for (i = max_bullets-1; i >= 0; i-= 1){
+		  if (bullets[i].visible == 0){
+		    j = i;
+		  }
+		}
+		bullets[j].visible = 1;
+		bullets[j].x = mdl_ship.x + ship_w;
+		bullets[j].y = mdl_ship.y + ship_h/2;
+		bullet_count = (bullet_count + 1);
+	}
+	fuel_lvl -= cannon_fuel_usage;
+}
+
+//reset ship
+on lkey{
+  mdl_ship.x = window_width/8;
+  mdl_ship.y = window_height-ship_h;
+  mdl_ship.visible = 1;
+  x_vel = 0;
+  y_vel = 0;
+  hull_hp = 100;
+  fuel_lvl = 1000;
+  score -= 2500;
+}
+
+on jkey{
+  cur_area = (cur_area+AREA_COUNT-1)%AREA_COUNT;
+}
+
+on kkey{
+  cur_area = (cur_area+1)%AREA_COUNT;
+}
